@@ -32,16 +32,17 @@
 const uint16_t CLAP_AVERAGEING_SAMLPES = 50;
 const uint16_t CLAP_SEQUENCE_MIN_SAMPLES_INTERVAL = 1;
 const uint16_t CLAP_SEQUENCE_MAX_SAMPLES_INTERVAL = HORIZONTAL_RESOLUTION;
-const uint16_t SINGLE_CLAP_SAMPLES = 5;
+const uint16_t SINGLE_CLAP_SAMPLES = 20;
 
 
 uint16_t oldSignal[SIGNAL_LENGTH];
 uint16_t adcBuffer[SIGNAL_LENGTH];
 uint16_t oldBaseAmplitude;
+uint16_t clapAmplitude;
 
 uint32_t nextTime = 0;
 
-int clapCooldown = 0;
+int clapCooldown = -1;
 int clapSequenceSamples = 0;
 int claps = 0;
 int clapSequenceSamplesCurrent = 0;
@@ -134,27 +135,47 @@ void loop(void)
   oldBaseAmplitude = map(clapThreshold, 0, 4096, VERTICAL_RESOLUTION-SIGNAL_FLOOR, INFO_PADDING);
   M5.Lcd.drawLine(0,oldBaseAmplitude,HORIZONTAL_RESOLUTION,oldBaseAmplitude, YELLOW);
 
-  if(clapCooldown <= 0) 
+  // clap has not been detected
+  if(clapCooldown < 0) 
   {
     if(adcBuffer[0] > clapThreshold) 
     {
+      // Start of a possible clap
       clapCooldown = SINGLE_CLAP_SAMPLES;
-      if(clapSequenceSamplesCurrent == 0) 
-      {
-        M5.Lcd.fillRect(0, 0, HORIZONTAL_RESOLUTION, INFO_PADDING, BLACK);
-        M5.Lcd.setCursor(20,20);
-
-        clapSequenceSamplesCurrent = clapSequenceSamples;
-        M5.Lcd.print("Starting sequence ");
-        M5.Lcd.print(clapSequenceSamples);
-        M5.Lcd.setCursor(20,40);
-      }
-      M5.Lcd.print("Clap ");
-      claps++;
+      clapAmplitude = adcBuffer[0];
     }
   }
+  // clap has ended successfully
+  else if (clapCooldown > 0)
+  {
+    clapCooldown--;
+
+    double progress = 1 - (((double)clapCooldown)/SINGLE_CLAP_SAMPLES);
+
+    // Check if amplitude gets to 75% of the amplitude in the clap interval
+    if(adcBuffer[0] > clapAmplitude - (clapAmplitude * progress * 0.5)) 
+    {
+      // If any follow up within the clap is higher amplitude than clap itself, cancel
+      clapCooldown = -1;
+
+      M5.Lcd.fillRect(0, VERTICAL_RESOLUTION-SIGNAL_FLOOR, HORIZONTAL_RESOLUTION, SIGNAL_FLOOR, RED);
+    }
+  }
+  // process clap
   else 
   {
+    if(clapSequenceSamplesCurrent == 0) 
+    {
+      M5.Lcd.fillRect(0, 0, HORIZONTAL_RESOLUTION, INFO_PADDING, BLACK);
+      M5.Lcd.setCursor(20,20);
+
+      clapSequenceSamplesCurrent = clapSequenceSamples;
+      M5.Lcd.print("Starting sequence ");
+      M5.Lcd.print(clapSequenceSamples);
+      M5.Lcd.setCursor(20,40);
+    }
+    M5.Lcd.print("Clap ");
+    claps++;
     clapCooldown--;
   }
 
